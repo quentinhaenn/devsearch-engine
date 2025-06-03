@@ -400,9 +400,30 @@ class DataLoader:
             logger.error(f"Error during quick test: {e}")
             raise e
         
+    
+    def clean_and_index_all(self):
+        logger.info("Starting clean and index all documents...")
+        doc_file = "sample_data/sample_dataset.json"
+        try:
+            stats = self.load_and_index(doc_file, force_recreate=True)
+            logger.info(f"Clean and index completed. Stats: {stats}")
+        except Exception as e:
+            logger.error(f"Error during clean and index all: {e}")
+            raise e
+        
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting DataLoader quick test...")
     data_loader = DataLoader()
-    data_loader._quick_test(sample_size=3)
-    logger.info("DataLoader quick test completed.")
+    try:
+        data_loader._quick_test(sample_size=3)
+        logger.info("DataLoader quick test completed.")
+        logger.info("Running clean and index all documents...")
+        data_loader.clean_and_index_all()
+        logger.info("Clean and index all documents completed.")
+    except Exception as e:
+        logger.error(f"Error during DataLoader quick test or clean and index all: {e}")
+        raise e
+        
+    
+    
