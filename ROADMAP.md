@@ -24,23 +24,22 @@
 
 **Livrables** : Recherche textuelle fonctionnelle avec métadonnées
 
-### Phase 3 : IA et recherche sémantique (Jours 5-6)
+### Phase 3 : IA et recherche sémantique
 
-- [ ] **Embeddings avec Sentence-BERT**
-  - [ ] Intégration sentence-transformers (`all-MiniLM-L6-v2`)
-  - [ ] Génération embeddings pour documents et requêtes
-  - [ ] Stockage dans Elasticsearch (dense_vector)
-  - [ ] Cache local pour optimisation performances
+- [x] **Embeddings avec Sentence-BERT**
+  - [x] Intégration sentence-transformers (`all-MiniLM-L6-v2`)
+  - [x] Génération embeddings pour documents et requêtes
+  - [x] Stockage dans Elasticsearch (dense_vector)
 
-- [ ] **Recherche hybride**
-  - [ ] Combinaison BM25 + similarité cosinus
-  - [ ] Scoring pondéré configurable (60% textuel + 40% sémantique)
-  - [ ] Normalisation des scores
-  - [ ] Pipeline de recherche en 2 étapes (filtrage + précision)
+- [x] **Recherche hybride**
+  - [x] Combinaison BM25 + similarité cosinus
+  - [x] Scoring pondéré configurable (60% textuel + 40% sémantique)
+  - [x] Normalisation des scores
+  - [x] Pipeline de recherche en 2 étapes (filtrage + précision)
 
 **Livrables** : Recherche sémantique opérationnelle
 
-### Phase 4 : Modèles de reranking IA (Jours 7-8)
+### Phase 4 : Modèles de reranking IA
 
 - [ ] **Cross-encoder pour reranking**
   - [ ] Intégration `cross-encoder/ms-marco-MiniLM-L-6-v2`
@@ -48,11 +47,11 @@
   - [ ] Optimisation batch pour performance
   - [ ] Cache résultats de reranking
 
-- [ ] **Scoring composite intelligent**
-  - [ ] **Pertinence** : Score cross-encoder (poids 0.6)
-  - [ ] **Popularité** : GitHub stars, vues, citations (poids 0.3)
-  - [ ] **Fraîcheur** : Décroissance temporelle exponentielle (poids 0.1)
-  - [ ] Normalisation et combinaison des scores
+- [x] **Scoring composite intelligent**
+  - [x] **Pertinence** : Score cross-encoder (poids 0.6)
+  - [x] **Popularité** : GitHub stars, vues, citations (poids 0.3)
+  - [x] **Fraîcheur** : Décroissance temporelle exponentielle (poids 0.1)
+  - [x] Normalisation et combinaison des scores
 
 - [ ] **Système de synonymes contextuels**
   - [ ] Dictionnaires techniques par domaine (Dev, ML, Cloud)
@@ -102,11 +101,10 @@
 {
   "mappings": {
     "properties": {
-      "title": {"type": "text", "analyzer": "french", "boost": 2.0},
-      "content": {"type": "text", "analyzer": "french"},
+      "title": {"type": "text"},
+      "content": {"type": "text"},
       "embedding": {"type": "dense_vector", "dims": 384, "similarity": "cosine"},
       "file_type": {"type": "keyword"},
-      "path": {"type": "keyword"},
       "created_at": {"type": "date"},
       "modified_at": {"type": "date"},
       "github_stars": {"type": "integer"},
@@ -117,19 +115,3 @@
   }
 }
 ```
-
-## 🎯 Objectifs entretien
-
-### Démontrer compétences techniques
-
-1. **IA/ML** : Embeddings, cross-encoders, scoring composite
-2. **Search** : Elasticsearch, BM25, recherche vectorielle
-3. **Engineering** : Pipeline optimisé, cache, monitoring
-4. **Product** : UX CLI, métriques qualité, cas d'usage
-
-### Questions techniques attendues
-
-- **Latence** : Comment optimiser le reranking ? (batch, cache, top-k)
-- **Qualité** : Métriques d'évaluation et A/B testing ?
-- **Scale** : Gestion de millions de documents ?
-- **Coûts** : Trade-off précision vs performance ?

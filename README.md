@@ -71,37 +71,3 @@ Requête utilisateur
 3. **Reranking intelligent** : Documentation officielle prioritaire
 4. **Recherche sémantique** : "comment sécuriser" trouve "security best practices"
 5. **Fraîcheur** : Articles récents sur nouvelles versions
-
-
-
-## 🐳 **Déploiement rapide**
-
-```bash
-# 1. Cloner et setup
-git clone https://github.com/user/devsearch-engine
-cd devsearch-engine
-
-# 2. Lancer Elasticsearch
-docker-compose up -d
-
-# 3. Installation et indexation
-pip install -e .
-devsearch index --source ./sample_docs/
-
-# 4. Recherche
-devsearch search "FastAPI middleware" --rerank
-```
-
-## 📈 **Points techniques pour l'entretien**
-
-### Choix d'architecture
-- **Elasticsearch** : Scalabilité native, support vector dense
-- **Modèles légers** : Sentence-BERT (110M params) + Cross-encoder (22M)
-- **Pipeline optimisé** : Filtrage rapide puis reranking précis
-- **Flexibilité** : Scoring pondéré configurable
-
-### Challenges résolus
-- **Latence** : Cache embeddings + recherche en 2 étapes
-- **Multilinguisme** : Modèles pré-entraînés FR/EN
-- **Pertinence** : Combinaison textuel/sémantique + reranking IA
-- **Production** : Conteneurisation, monitoring, logs structurés
