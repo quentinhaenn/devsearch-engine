@@ -1,0 +1,33 @@
+# Web frameworks
+framework, library, package, tool, platform, stack
+api,endpoint, service, microservice, rest, interface
+web,http, https, internet, online, browser
+
+# Authentication & Security
+auth,authentication, authorization, login, signin, credentials
+secure,security, protection, safe, encrypt, encryption, ssl, tls
+token,jwt, bearer, oauth, session, cookie
+user, utilisateur, account, profile, identity
+
+# Deployment & DevOps
+deploy,deployment, deploying, release, publish, containerization, CI/CD, CI, CD
+container, docker, kubernetes, k8s, pod, image
+server,host, instance, machine, node, cluster
+config,configuration, settings, environment, variables
+
+# Development
+code,programming, development, coding, script, source
+debug,debugging, troubleshoot, error, bug, issue
+test,testing, unit, integration, qa, validation
+
+# Databases
+database,db, sql, nosql, mongodb, postgresql, mysql
+data,information, content, records, dataset
+
+# Synonymes français -> anglais
+authentification => authentication, auth, login
+sécurité => security, secure, protection
+déploiement => deployment, deploy, release
+développement => development, coding, programming
+données => data, database, information
+serveur => server, host, instance

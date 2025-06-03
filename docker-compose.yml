@@ -10,6 +10,7 @@ services:
       - "127.0.0.1:9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      - ./sample_data/sample_synonyms.txt:/usr/share/elasticsearch/config/synonyms.txt
   
   devsearch:
     build: .

@@ -24,6 +24,22 @@ class ElasticSearchConfig:
 
     INDEX_NAME: str = "devsearch_index"
     INDEX_SETTINGS: Dict[str, Any] = {
+        "analysis": {
+            "filter": {
+                "synonym_filter" :{
+                    "type":"synonym",
+                    "synonyms_path": "synonyms.txt",
+                    "updateable": True  # Allows updating synonyms without reindexing
+                }
+            },
+            "analyzer": {
+                "standard_analyzer": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": ["lowercase", "asciifolding", "synonym_filter", "stop"]
+                }
+            },
+        },
         "number_of_shards": 1,
         "number_of_replicas": 0,
         "refresh_interval": "1s",
@@ -36,13 +52,15 @@ class ElasticSearchConfig:
             "title": {
                 "type": "text",
                 "analyzer": "standard",
+                "search_analyzer": "standard_analyzer",
                 "fields": {
                     "keywords" : {"type": "keyword"}
                 }
             },
             "content": {
                 "type": "text",
-                "analyzer": "standard"
+                "analyzer": "standard",
+                "search_analyzer": "standard_analyzer"
             },
 
             # vector embeddings for semantic search
