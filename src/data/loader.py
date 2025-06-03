@@ -15,6 +15,7 @@ from math import exp
 from typing import List, Dict, Any
 from .client import ElasticSearchClient
 from .config import ElasticSearchConfig
+from src.search.embeddings import EmbeddingManager
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,7 @@ class DataLoader:
 
     def __init__(self):
         self.config = ElasticSearchConfig()
+        self.embedding_manager = EmbeddingManager()
         self.client = ElasticSearchClient()
         self.index_name = self.config.INDEX_NAME
         self.client.ping()
@@ -202,6 +204,8 @@ class DataLoader:
             
             logger.info("STEP 4: Indexing processed documents")
             if processed_documents:
+                self.generate_embeddings(processed_documents)
+                logger.info(f"Generated embeddings for {len(processed_documents)} documents.")
                 indexing_stats = self.bulk_index(processed_documents, batch_size=batch_size)
                 pipeline_stats["documents_indexed"] = indexing_stats.get("indexed", 0)
                 pipeline_stats["indexing_stats"] = indexing_stats
@@ -368,6 +372,51 @@ class DataLoader:
             logger.error(f"Error parsing date {date}: {e}")
             return ""
     
+
+    ### Embeddings ### 
+
+    def generate_embeddings(self, documents: List[Dict[str, Any]]) -> None:
+        """
+        Generate embeddings for the documents and index them in Elasticsearch.
+        
+        Args:
+            documents (List[Dict[str, Any]]): List of documents to generate embeddings for.
+        """
+        logger.info("Generating and indexing embeddings for documents...")
+        if not documents:
+            logger.warning("No documents provided for embedding generation.")
+            return
+        
+        try:
+            self.create_embeddings(documents)
+            logger.info(f"Generated embeddings for {len(documents)} documents.")
+        except Exception as e:
+            logger.error(f"Error generating embeddings: {e}")
+            raise e
+    
+    def create_embeddings(self, documents: List[Dict[str, Any]]) -> None:
+        """
+        Create embeddings for documents.
+        
+        Args:
+            documents (List[Dict[str, Any]]): List of documents to create embeddings for.
+        
+        Returns:
+            None
+        """
+        logger.info("Creating embeddings for documents...")
+        try:
+            for doc in documents:
+                doc['embedding'] = self.embedding_manager.generate_document_embedding(
+                    title=doc.get('title', ''),
+                    content=doc.get('content', ''),
+                    weight_title=0.4
+                )
+            
+            logger.info(f"Embeddings created for {len(documents)} documents.")
+        except Exception as e:
+            logger.error(f"Error creating embeddings: {e}")
+            raise e
 
     def _quick_test(self, sample_size=3) -> None:
         """

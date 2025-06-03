@@ -3,7 +3,7 @@ Configuration for ElasticSearch and other data-related settings.
 """
 import logging
 from typing import Dict, Any
-
+import os
 #Logger setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,8 +12,9 @@ class ElasticSearchConfig:
     """
     Config class for ES connection and settings.
     """
-    HOST: str = "localhost"
-    PORT: int = 9200
+    ES_ENV = os.getenv("ES_HOST", "localhost")
+    HOST: str = ES_ENV.split(":")[0] if ":" in ES_ENV else ES_ENV
+    PORT: int = int(ES_ENV.split(":")[1]) if ":" in ES_ENV else 9200  # Default port for ES is 9200
     URL: str = f"http://{HOST}:{PORT}"
 
     # Timeout settings

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Literal
 from src.data import client
+from .embeddings import EmbeddingManager
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,7 @@ class SearchEngine:
         self.indexes = set()
         self.default_index = "devsearch_index"
         self.default_timeout = 30  # seconds
+        self.embedding_manager = EmbeddingManager()
 
     def _build_query(self, query: str, index_name: str = None, **kwargs) -> Dict[str, Any]:
         """
@@ -400,6 +402,101 @@ class SearchEngine:
             logger.error(f"Error during advanced search: {e}")
             return self._error_result(query, str(e))
     
+
+    ### Semantic Search Methods ###
+    def semantic_search(self, 
+                   query: str, 
+                   index_name: str = None, 
+                   top_k: int = 10,
+                   hybrid_weight: float = 0.5) -> Dict[str, Any]:
+        """
+        Perform semantic search using embeddings + BM25 hybrid approach.
+        
+        Args:
+            query: Search query
+            index_name: ES index name
+            top_k: Number of results
+            hybrid_weight: Weight for vector vs BM25 (0.5 = 50/50)
+            
+        Returns:
+            Search results with semantic ranking
+        """
+        index_name = index_name or self.default_index
+        
+        if not query or not query.strip():
+            return self._empty_result(query)
+        
+        query = query.strip()
+        start_time = datetime.now()
+        
+        logger.info(f"🧠 Semantic search: '{query}'")
+        
+        try:
+            query_embedding = self.embedding_manager.generate_embedding(query)
+            
+
+            bm25_query = self._build_simple_query(query, top_k=top_k).get("query", {})
+
+            es_query = {
+                "query": {
+                    "function_score": {
+                        "query": bm25_query,
+                        "functions": [
+                            {
+                                "script_score": {
+                                    "script": {
+                                        "source": f"""
+                                        double vectorScore = cosineSimilarity(params.query_vector, 'embedding') + 1.0;
+                                        double bm25Score = _score;
+                                        return {hybrid_weight} * vectorScore + {1-hybrid_weight} * bm25Score;
+                                        """,
+                                        "params": {"query_vector": query_embedding.tolist()}
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "size": top_k,
+                "_source": [
+                    "id", "title", "content", "file_type", "language",
+                    "created_at", "github_stars", "popularity_score", 
+                    "freshness_score", "tags", "source"
+                ]
+            }
+            
+
+            response = self.client.client.search(
+                index=index_name,
+                body=es_query,
+                request_timeout=self.default_timeout
+            )
+            
+            search_time = datetime.now() - start_time
+            formatted_results = self._parse_es_response(response, query, search_time)
+            formatted_results['search_type'] = 'semantic_hybrid'
+            formatted_results['hybrid_weight'] = hybrid_weight
+            
+            logger.info(f"🧠 Semantic search completed: {formatted_results['total_hits']} hits")
+            return formatted_results
+        
+        except Exception as e:
+            logger.error(f"❌ Semantic search failed: {e}")
+            return self._error_result(query, str(e))
+
+
+    ### Method for CLI ###
+    def search(self, query: str, index_name: str = None, search_type: Literal["simple", "advanced", "semantic"] = "simple", **kwargs) -> Dict[str, Any]:
+        if search_type == "simple":
+            return self.simple_search(query, index_name=index_name, **kwargs)
+        elif search_type == "advanced":
+            return self.advanced_search(query, index_name=index_name, **kwargs)
+        elif search_type == "semantic":
+            return self.semantic_search(query, index_name=index_name, **kwargs)
+        else:
+            raise ValueError(f"Unknown search type: {search_type}")
+
+    #### Quick and Advanced Tests ####
     def quick_test(self) -> None:
         """
         Quick test to verify the search engine functionality.
@@ -497,8 +594,43 @@ class SearchEngine:
             print(f"Expected: {test['expected']}")
             print("-" * 60)
 
+    def semantic_test_suite(self) -> None:
+        """Test semantic search capabilities."""
+        test_cases = [
+            {
+                "query": "web framework",
+                "expected": "Should find FastAPI, Flask, Django content"
+            },
+            {
+                "query": "deploy container",
+                "expected": "Should find Docker, Kubernetes deployment guides"  
+            },
+            {
+                "query": "secure API",
+                "expected": "Should find authentication, JWT, security docs"
+            },
+            {
+                "query": "authentification utilisateur",  # FR
+                "expected": "Should find EN authentication content too"
+            }
+        ]
+        
+        for test in test_cases:
+            print(f"\n🧠 Semantic test: '{test['query']}'")
+            
+
+            semantic_results = self.semantic_search(test['query'], top_k=3)
+            print(f"   Semantic hits: {semantic_results['total_hits']}")
+            
+            if semantic_results['results']:
+                print(f"   Top semantic result: {semantic_results['results'][0]['title']}")
+            
+            print(f"   Expected: {test['expected']}")
+
 if __name__ == "__main__":
     print("Testing SearchEngine...")
     search_engine = SearchEngine()
     search_engine.quick_test()
     search_engine.advanced_test()
+    search_engine.semantic_test_suite()
+    print("SearchEngine tests completed.")
