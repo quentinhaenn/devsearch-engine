@@ -22,12 +22,8 @@ def search(query, limit, type):
     if not results:
         click.echo("No results found.")
         return
-    print(results)
-    if not results:
-        click.echo("No results found.")
-    else:
-        for idx, result in enumerate(results, start=1):
-            click.echo(f"{idx}.\n Title: {result['title']}\n Content: {result['content']}\nScore: {result['score']}\n")
+    for idx, result in enumerate(results, start=1):
+        click.echo(f"{idx}.\n Title: {result['title']}\n Content: {result['content']}\nScore: {result['score']}\n")
 
 if __name__ == "__main__":
     cli()
