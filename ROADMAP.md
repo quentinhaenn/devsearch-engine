@@ -12,7 +12,7 @@
 
 ### Phase 2 : Moteur de recherche (Jours 3-4)
 
-- [ ] **Elasticsearch Integration**
+- [x] **Elasticsearch Integration**
   - [x] Client Python (elasticsearch-py)
   - [x] Schema d'index avec dense_vector pour embeddings
   - [x] Indexation de documents (JSON)
@@ -53,8 +53,8 @@
 - [x] **Système de synonymes contextuels**
   - [ ] Dictionnaires techniques par domaine (Dev, ML, Cloud)
   - [ ] Expansion automatique des requêtes
-  - [ ] Support multi-langues (EN/FR)
-  - [ ] Synonymes sémantiques via embeddings
+  - [x] Support multi-langues (EN/FR)
+  - [x] Synonymes sémantiques via embeddings
 
 **Livrables** : Reranking IA fonctionnel, synonymes intelligents
 
@@ -74,6 +74,7 @@
 
 - [ ] **Performance et monitoring**
   - [x] Métriques de latence (recherche, reranking, total)
+  - [ ] Métriques de précision (R@5, P@5, MRR)
   - [ ] Cache intelligent multi-niveaux
   - [ ] Logs structurés avec scoring détaillé
   - [ ] Tests de performance avec profiling
