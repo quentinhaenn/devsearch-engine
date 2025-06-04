@@ -15,13 +15,7 @@ Créer un moteur de recherche avancé pour la documentation technique intégrant
 ### Recherche multicritères
 ```bash
 # Recherche basique
-devsearch search "FastAPI authentication"
-
-# Recherche sémantique + reranking
-devsearch search "sécuriser une API" --semantic --rerank
-
-# Avec filtres temporels
-devsearch search "Docker deployment" --recent --boost-popular
+python -m src.main search "deploy ML model"
 ```
 
 ### Intelligence artificielle intégrée
@@ -40,7 +34,6 @@ sentence-transformers>=2.2.0   # Embeddings sémantiques
 transformers>=4.21.0          # Modèles de reranking
 torch>=1.13.0                 # Backend ML
 click>=8.1.0                  # CLI framework
-rich>=13.0                    # Interface utilisateur élégante
 numpy>=1.21.0                 # Calculs numériques
 ```
 
@@ -71,3 +64,30 @@ Requête utilisateur
 3. **Reranking intelligent** : Documentation officielle prioritaire
 4. **Recherche sémantique** : "comment sécuriser" trouve "security best practices"
 5. **Fraîcheur** : Articles récents sur nouvelles versions
+
+
+## Installation et exécution
+
+'''bash
+# virtualenv
+python - m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+```bash
+# Docker
+docker compose up -d
+```
+
+```bash
+# Lancer une recherche
+python -m src.main search "deploy ML model"
+```
+
+## Prévus
+
+- **Différents types de recherche** : Recherche par tags, par date, par popularité
+- **Intégration avec d'autres sources** : StackOverflow, GitHub, forums techniques (PRIORITAIRE)
+- **Amélioration de l'interface CLI** : Options avancées, filtres, suggestions
+- **Tests unitaires et d'intégration** : Couverture complète du code
+- **Documentation complète** : Guides d'utilisation, API, exemples

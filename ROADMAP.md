@@ -32,19 +32,16 @@
   - [x] Stockage dans Elasticsearch (dense_vector)
 
 - [x] **Recherche hybride**
-  - [x] Combinaison BM25 + similarité cosinus
-  - [x] Scoring pondéré configurable (60% textuel + 40% sémantique)
-  - [x] Normalisation des scores
-  - [x] Pipeline de recherche en 2 étapes (filtrage + précision)
+  - [x] Combinaison BM25 + similarité cosinus (RRF)
 
 **Livrables** : Recherche sémantique opérationnelle
 
 ### Phase 4 : Modèles de reranking IA
 
 - [ ] **Cross-encoder pour reranking**
-  - [ ] Intégration `cross-encoder/ms-marco-MiniLM-L-6-v2`
-  - [ ] Pipeline : Top 100 → Reranking → Top 10
-  - [ ] Optimisation batch pour performance
+  - [x] Intégration `cross-encoder/ms-marco-MiniLM-L-6-v2`
+  - [x] Pipeline : Top 100 → Reranking → Top 10
+  - [x] Optimisation batch pour performance
   - [ ] Cache résultats de reranking
 
 - [x] **Scoring composite intelligent**
@@ -53,7 +50,7 @@
   - [x] **Fraîcheur** : Décroissance temporelle exponentielle (poids 0.1)
   - [x] Normalisation et combinaison des scores
 
-- [ ] **Système de synonymes contextuels**
+- [x] **Système de synonymes contextuels**
   - [ ] Dictionnaires techniques par domaine (Dev, ML, Cloud)
   - [ ] Expansion automatique des requêtes
   - [ ] Support multi-langues (EN/FR)
@@ -76,7 +73,7 @@
   - [ ] Articles Stack Overflow avec vues
 
 - [ ] **Performance et monitoring**
-  - [ ] Métriques de latence (recherche, reranking, total)
+  - [x] Métriques de latence (recherche, reranking, total)
   - [ ] Cache intelligent multi-niveaux
   - [ ] Logs structurés avec scoring détaillé
   - [ ] Tests de performance avec profiling
@@ -95,23 +92,72 @@
 6. **Multilinguisme** : "authentification" ↔ "authentication"
 
 
-### Elasticsearch optimisé
+### Elasticsearch Mapping pour configs et indexation
 
-```json
-{
-  "mappings": {
-    "properties": {
-      "title": {"type": "text"},
-      "content": {"type": "text"},
-      "embedding": {"type": "dense_vector", "dims": 384, "similarity": "cosine"},
-      "file_type": {"type": "keyword"},
-      "created_at": {"type": "date"},
-      "modified_at": {"type": "date"},
-      "github_stars": {"type": "integer"},
-      "view_count": {"type": "integer"},
-      "popularity_score": {"type": "float"},
-      "freshness_score": {"type": "float"}
+```python
+INDEX_SETTINGS: Dict[str, Any] = {
+        "analysis": {
+            "filter": {
+                "synonym_filter" :{
+                    "type":"synonym",
+                    "synonyms_path": "synonyms.txt",
+                    "updateable": True  # Allows updating synonyms without reindexing
+                }
+            },
+            "analyzer": {
+                "standard_analyzer": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": ["lowercase", "asciifolding", "synonym_filter", "stop"]
+                }
+            },
+        },
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "1s",
     }
-  }
-}
+
+    # Mapping for the index
+    INDEX_MAPPING: Dict[str, Any] = {
+        "properties": {
+            "id": {"type": "keyword"},
+            "title": {
+                "type": "text",
+                "analyzer": "standard",
+                "search_analyzer": "standard_analyzer",
+                "fields": {
+                    "keywords" : {"type": "keyword"}
+                }
+            },
+            "content": {
+                "type": "text",
+                "analyzer": "standard",
+                "search_analyzer": "standard_analyzer"
+            },
+
+            # vector embeddings for semantic search
+            "embedding": {
+                "type": "dense_vector",
+                "dims": 384,  # Sentence-BERT base model dimensions. 
+                "index": True,
+                "similarity": "cosine" # Classic cosine similarity for NLP via embeddings. TODO: test if other similarity metrics work better.
+            },
+            #Metadata fields
+            "file_type": {"type": "keyword"},
+            "path": {"type": "keyword"},
+            "language": {"type": "keyword"},
+            "tags": {"type": "keyword"},
+            "source": {"type": "keyword"},
+
+            # Datetime fields
+            "created_at": {"type": "date"},
+            "modified_at": {"type": "date"},
+
+            # Additional metadata for scoring
+            "github_stars": {"type": "integer"},
+            "view_count": {"type": "integer"},
+            "popularity_score": {"type": "float"},
+            "freshness_score": {"type": "float"},
+        }
+    }
 ```
