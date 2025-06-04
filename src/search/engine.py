@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Literal
 from src.data import client
 from .embeddings import EmbeddingManager
 from .reranker import CrossEncoderReranker, RerankingResult
+from elasticsearch import dsl
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -37,200 +38,96 @@ class SearchEngine:
             Dict[str, Any]: A dictionary representing the search query.
         """
         
-        es_query = self._build_simple_query(query, **kwargs)
-        complex_keywords = ["boolean", "filters", "sort_by", "agg", "rerank", "boost"]
-        if any(keyword in kwargs for keyword in complex_keywords):
-            logger.info("Building complex query.")
-            es_query = self._build_complex_query(es_query, **kwargs)
-        return es_query
-    
-    def _build_simple_query(self, query: str, **kwargs) -> Dict[str, Any]:
-        top_k = kwargs.get("top_k", None)
-        return {
-                "query": {
-                    "multi_match":{
-                        "query": query,
-                        "fields": ["title^2", "content", "tags"],
-                        "type": "best_fields",
-                        "minimum_should_match": "75%",
-                        "fuzziness": "AUTO"
-                    }
-                },
-                "size": top_k or 10,  # Default to top 10 results if not specified
-                "highlight": {
-                    "fields" :{
-                        "title": {
-                            "pre_tags": ["<em>"],
-                            "post_tags": ["</em>"],
-                            "number_of_fragments": 1
-                        },
-                        "content": {
-                            "pre_tags": ["<em>"],
-                            "post_tags": ["</em>"],
-                            "number_of_fragments": 2,
-                            "fragment_size": 150
-                        }
-                    }
-                },
-                "_source" : [
-                    "id", "title", "content", "file_type", "language", "tags", "created_at", "github_stars", "view_count", "popularity_score", "freshness_score", "tags", "source"
-                ]
-            }
-
-    def _build_complex_query(self, es_query: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        """
-        Extend the base query with additional parameters like filters, sorting, etc.
+        top_k = kwargs.get("top_k", 10)
+        es_filters = []
+        if kwargs.get("filter_file_type"):
+            es_filters.append({"terms": {"file_type.keyword" : kwargs.get("filter_file_type")}})
+        if kwargs.get("filter_language"):
+            es_filters.append({"terms": {"language.keyword" : kwargs.get("filter_language")}})
         
-        Args:
-            es_query (Dict[str, Any]): The base search query.
-            **kwargs: Additional parameters to extend the query.
+        date_filters = {}
+        if kwargs.get("date_from"):
+            date_filters["gte"] = kwargs.get("date_from")
+        if kwargs.get("date_to"):
+            date_filters["lte"] = kwargs.get("date_to")
         
-        Returns:
-            Dict[str, Any]: The extended search query.
-        """
-        base_query = es_query.get("query", {})
+        candidates = top_k*5
 
-        bool_query = {
-            "bool": {
-                "must": base_query,
-                "filter": [],
-            }
+        s = dsl.Search()
+        knn_s = dsl.Search()
+        s = s.from_dict(
+            {
+            "size": top_k or 10,  # Default to top 10 results if not specified
+            "highlight": {
+                "fields" :{
+                    "title": {
+                        "pre_tags": ["<em>"],
+                        "post_tags": ["</em>"],
+                        "number_of_fragments": 1
+                    },
+                    "content": {
+                        "pre_tags": ["<em>"],
+                        "post_tags": ["</em>"],
+                        "number_of_fragments": 2,
+                        "fragment_size": 150
+                    }
+                }
+            },
+            "_source" : [
+                "id", "title", "content", "file_type", "language", "tags", "created_at", "github_stars", "view_count", "popularity_score", "freshness_score", "tags", "source"
+            ]
+        }
+        )
+        knn_s.source([
+                "id", "title", "content", "file_type", "language", "tags", "created_at", "github_stars", "view_count", "popularity_score", "freshness_score", "tags", "source"
+            ])
+        s = s.query("multi_match", 
+                query=query,
+                fields=["title^2", "content", "tags"],
+                type="best_fields",
+                minimum_should_match="75%",
+                fuzziness = "AUTO"
+                )
+        knn_s = knn_s.knn(
+            field="embedding",
+            k = candidates,
+            num_candidates= candidates*2,
+            query_vector=self.embedding_manager.generate_query_embedding(query=query).tolist()
+        )
+        text_query = {
+                "multi_match":{
+                    "query": query,
+                    "fields": ["title^2", "content", "tags"],
+                    "type": "best_fields",
+                    "minimum_should_match": "75%",
+                    "fuzziness": "AUTO"
+                    }
+                }
+        
+        knn_query = {
+            "field": "embedding",
+            "query_vector" : self.embedding_manager.generate_query_embedding(query=query).tolist(),
+            "k": candidates,
+            "num_candidates":candidates*2
         }
 
-        # Add filters if provided
-        filters = kwargs.get("filters", {})
-        if filters:
-            self._add_metadata_filters(bool_query["bool"]["filter"], filters)
-            self._add_date_filters(bool_query["bool"]["filter"], filters)
+        if es_filters:
+            text_query = {
+                "bool": {
+                    "must": text_query,
+                    "filter": es_filters
+                }
+            }
+            knn_query["filter"] = es_filters
+        
 
-        boost = kwargs.get("boost", None)
-        if boost:
-            self._add_boosting(bool_query["bool"], boost)
+        text = s.to_dict()
+        knn_query = knn_s.to_dict()
         
-        es_query["query"] = bool_query
+        return [text, knn_query]
+        
 
-        sorting = kwargs.get("sort", None)
-        if sorting:
-            self._add_sorting(es_query, sorting)
-        
-        return es_query
-    
-    def _add_metadata_filters(self, filter_list: List[Dict[str, Any]], filters: Dict[str, Any]) -> None:
-        """
-        Add metadata filters to the filter list.
-        
-        Args:
-            filter_list (List[Dict[str, Any]]): The list to add filters to.
-            filters (Dict[str, Any]): The filters to apply.
-        """
-        for key, value in filters.items():
-            if key in ["file_type", "language", "tags", "source"]:
-                if isinstance(value, str):
-                    value = [value]
-
-                filter_list.append({
-                    "terms": {key: value}
-                })
-        
-    
-    def _add_date_filters(self, filter_list: List[Dict[str, Any]], filters: Dict[str, Any]) -> None:
-        """
-        Add date filters to the filter list.
-        
-        Args:
-            filter_list (List[Dict[str, Any]]): The list to add filters to.
-            filters (Dict[str, Any]): The filters to apply.
-        """
-        if "date_range" in filters:
-            date_range = filters["date_range"]
-            if isinstance(date_range, dict) and "gte" in date_range and "lte" in date_range:
-                filter_list.append({
-                    "range": {
-                        "created_at": {
-                            "gte": date_range["gte"],
-                            "lte": date_range["lte"]
-                        }
-                    }
-                })
-        
-    def _add_boosting(self, bool_query: Dict[str, Any], boost: Dict[str, float]) -> None:
-        """
-        Add boosting to the query.
-        
-        Args:
-            bool_query (Dict[str, Any]): The boolean query to modify.
-            boost (Dict[str, float]): The boosting parameters.
-                    boost structure should be like: {key_field: boost_value, ...}
-        """
-        if boost is None or len(boost) == 0:
-            logger.warning("No boosting parameters provided, skipping boosting.")
-            return
-        bool_query.setdefault("should", [])
-        boost_queries = bool_query["should"]
-        for field, boost_value in boost.items():
-            if field == "official_docs":
-                boost_queries.append({
-                    "term": {
-                        "source": {
-                            "value": "official_docs",
-                            "boost": boost_value
-                        }
-                    }
-                })
-            elif field == "recent":
-                boost_queries.append({
-                    "range": {
-                        "freshness_score": {
-                            "gte": 0.5,
-                            "boost": boost_value
-                        }
-                    }
-                })
-            
-            elif field == "popularity":
-                boost_queries.append({
-                    "range": {
-                        "popularity_score": {
-                            "gte": 0.5,
-                            "boost": boost_value
-                        }
-                    }
-                })
-        
-    def _add_sorting(self, es_query: Dict[str, Any], sort_by: str, order: Optional[Literal["desc", "asc"]] = None) -> None:
-        """
-        Add sorting to the search query.
-        
-        Args:
-            es_query (Dict[str, Any]): The search query to modify.
-            sort_by (str): The sorting field.
-            order (str): The order of sorting, either 'asc' or 'desc'.
-        """
-        if not sort_by:
-            logger.warning("No sorting parameters provided, skipping sorting.")
-            return
-        
-        if not order:
-            order = "desc"
-        key = None  # Default sorting key
-        match sort_by:
-            case "popularity":
-                key = "popularity_score"
-            case "freshness":
-                key = "freshness_score"
-            case "recent":
-                key = "created_at"
-            case "stars":
-                key = "github_stars"
-        if key:
-            es_query["sort"] = [
-                {key : {"order": order}},
-                {"_score": {"order": "desc"}}
-            ]
-        logger.info(f"Sorting added: {key} in {order} order.")
-            
-
-    def simple_search(self, query: str, index_name: str = None, top_k: int = None) -> List[Dict[str, Any]]:
+    def simple_search(self, query: str, index_name: str = None, top_k: int = 10, **kwargs) -> List[Dict[str, Any]]:
         """
         Perform a simple search on the given index.
 
@@ -256,21 +153,25 @@ class SearchEngine:
         start_time = datetime.now()
 
         try:
-            es_query = self._build_query(query, top_k=top_k)
-
-            res = self.client.client.search(
-                index=index_name,
-                body=es_query,
-                request_timeout=self.default_timeout
-            )
-            search_time = datetime.now() - start_time
-            formatted_results = self._parse_es_response(res, query, search_time)
-            logger.info(f"Search Completed: {formatted_results['total_hits']} hits found in {search_time} seconds.")
-            return formatted_results
+            formatted_results = []
+            queries = self._build_query(query, top_k=top_k)
+            for query in queries:
+                res = self.client.client.search(
+                    index=index_name,
+                    body=query,
+                    request_timeout=self.default_timeout
+                )
+                search_time = datetime.now() - start_time
+                format_res = self._parse_es_response(res, query, search_time)
+                formatted_results.append(format_res)
+                logger.info(f"Search Completed: {format_res['total_hits']} hits found in {search_time} seconds.")
+            
+            return self._manual_rrf(formatted_results, rank_constant=40)
         
         except Exception as e:
             logger.error(f"Error during search: {e}")
-            return self._empty_result(query)
+            raise
+            # return self._empty_result(query)
 
     def _parse_es_response(self, response: Dict[str, Any], query: str, search_time: datetime) -> Dict[str, Any]:
         """
@@ -364,139 +265,43 @@ class SearchEngine:
             "error": error_message
         }
 
-    def advanced_search(self, query: str, index_name: str = None, filters: Dict[str, Any] = None, sort_by: str = "relevance", order: Optional[Literal["desc", "asc"]] = None, size: int = 10, boost: Dict[str, float] = None) -> Dict[str, Any]:
-        """
-        Perform an advanced search on the given index with optional filters.
+    def _manual_rrf(self, results: List[Dict[str, Any]], rank_constant: int=40) -> Dict[str, Any]:
+        if not results:
+            return {}
+        returning_dict = results[-1].copy()
+        fused_scores = {}
 
-        Args:
-            query (str): The search query.
-            index_name (str): The name of the index to search.
-            filters (Dict[str, Any], optional): Filters to apply to the search.
+        for result in results:
+            result_list = result["results"]
+            for rank, doc in enumerate(result_list):
+                doc_id = doc.get("id")
+                rrf_score_contribution = 1.0 / (rank_constant + (rank +1))
 
-        Returns:
-            List[Dict[str, Any]]: A list of search results.
-        """
-        # Placeholder for advanced search logic
-        query = query.strip() if query else ""
-        if not query:
-            logger.warning("Empty search query provided for advanced search.")
-            return self._empty_result(query)
-        index_name = index_name or self.default_index
-
-        if index_name not in self.indexes:
-            if self.client.index_exists(index_name):
-                self.indexes.add(index_name)
-            else:
-                raise ValueError(f"Index '{index_name}' does not exist.")
-        start_time = datetime.now()
-        try:
-            query = self._build_query(query, index_name=index_name, filters=filters, sort=sort_by, order=order, top_k=size, boost=boost)
-            res = self.client.client.search(
-                index=index_name,
-                body=query,
-                request_timeout=self.default_timeout
-            )
-            search_time = datetime.now() - start_time
-            formatted_results = self._parse_es_response(res, query, search_time)
-            logger.info(f"Advanced Search Completed: {formatted_results['total_hits']} hits found in {search_time} seconds.")
-            return formatted_results
-        except Exception as e:
-            logger.error(f"Error during advanced search: {e}")
-            return self._error_result(query, str(e))
-    
-
-    ### Semantic Search Methods ###
-    def semantic_search(self, 
-                   query: str, 
-                   index_name: str = None, 
-                   top_k: int = 10,
-                   hybrid_weight: float = 0.5) -> Dict[str, Any]:
-        """
-        Perform semantic search using embeddings + BM25 hybrid approach.
+                if doc_id not in fused_scores:
+                    fused_scores[doc_id] = {
+                        "doc": doc,
+                        "rrf_score":0.0
+                    } 
+                
+                fused_scores[doc_id]['rrf_score'] += rrf_score_contribution
         
-        Args:
-            query: Search query
-            index_name: ES index name
-            top_k: Number of results
-            hybrid_weight: Weight for vector vs BM25 (0.5 = 50/50)
-            
-        Returns:
-            Search results with semantic ranking
-        """
-        index_name = index_name or self.default_index
-        
-        if not query or not query.strip():
-            return self._empty_result(query)
-        
-        query = query.strip()
-        start_time = datetime.now()
-        
-        logger.info(f"🧠 Semantic search: '{query}'")
-        
-        try:
-            query_embedding = self.embedding_manager.generate_embedding(query)
-            
+        combined_results = []
+        for doc_id, data in fused_scores.items():
+            data["doc"]["score"] = data["rrf_score"]
+            data["doc"]["original_score_type"] = "rrf_manual"
+            combined_results.append(data["doc"])
 
-            bm25_query = self._build_simple_query(query, top_k=top_k).get("query", {})
-
-            es_query = {
-                "query": {
-                    "function_score": {
-                        "query": bm25_query,
-                        "functions": [
-                            {
-                                "script_score": {
-                                    "script": {
-                                        "source": f"""
-                                        double vectorScore = cosineSimilarity(params.query_vector, 'embedding') + 1.0;
-                                        double bm25Score = _score;
-                                        return {hybrid_weight} * vectorScore + {1-hybrid_weight} * bm25Score;
-                                        """,
-                                        "params": {"query_vector": query_embedding.tolist()}
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "size": top_k,
-                "_source": [
-                    "id", "title", "content", "file_type", "language",
-                    "created_at", "github_stars", "popularity_score", 
-                    "freshness_score", "tags", "source"
-                ]
-            }
-            
-
-            response = self.client.client.search(
-                index=index_name,
-                body=es_query,
-                request_timeout=self.default_timeout
-            )
-            
-            search_time = datetime.now() - start_time
-            formatted_results = self._parse_es_response(response, query, search_time)
-            formatted_results['search_type'] = 'semantic_hybrid'
-            formatted_results['hybrid_weight'] = hybrid_weight
-            
-            logger.info(f"🧠 Semantic search completed: {formatted_results['total_hits']} hits")
-            return formatted_results
-        
-        except Exception as e:
-            logger.error(f"❌ Semantic search failed: {e}")
-            return self._error_result(query, str(e))
-
+        combined_results.sort(key=lambda x: x["score"], reverse=True)
+        returning_dict["results"] = combined_results
+        return returning_dict
 
     ### Method for CLI ###
-    def search(self, query: str, index_name: str = None, search_type: Literal["simple", "advanced", "semantic"] = "simple", **kwargs) -> RerankingResult:
+    def search(self, query: str, index_name: str = None, search_type: Literal["simple"] = "simple", **kwargs) -> RerankingResult:
         if search_type == "simple":
             results = self.simple_search(query, index_name=index_name, **kwargs)
-        elif search_type == "advanced":
-            results = self.advanced_search(query, index_name=index_name, **kwargs)
-        elif search_type == "semantic":
-            results = self.semantic_search(query, index_name=index_name, **kwargs)
         else:
             raise ValueError(f"Unknown search type: {search_type}")
+        
         return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10))
     
     def explain_results(self, results: RerankingResult, query: str):
@@ -520,6 +325,7 @@ class SearchEngine:
             print(f'\nOthers : {results["results"][1:]}')
         except Exception as e:
             logger.error(f"Quick test failed: {e}")
+            raise
         
         finally:
             logger.info("Quick test completed.")
@@ -581,7 +387,7 @@ class SearchEngine:
             print(f"Query: '{test['query']}'")
             print(f"Filters: {test.get('filters', {})}")
             
-            results = self.advanced_search(
+            results = self.simple_search(
                 query=test['query'],
                 filters=test.get('filters', {}),
                 sort_by=test.get('sort_by', 'relevance'),
@@ -625,7 +431,7 @@ class SearchEngine:
             print(f"\n🧠 Semantic test: '{test['query']}'")
             
 
-            semantic_results = self.semantic_search(test['query'], top_k=3)
+            semantic_results = self.simple_search(test['query'], top_k=3)
             print(f"   Semantic hits: {semantic_results['total_hits']}")
             
             if semantic_results['results']:

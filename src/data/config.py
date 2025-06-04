@@ -14,13 +14,13 @@ class ElasticSearchConfig:
     """
     ES_ENV = os.getenv("ES_HOST", "localhost")
     HOST: str = ES_ENV.split(":")[0] if ":" in ES_ENV else ES_ENV
-    PORT: int = int(ES_ENV.split(":")[1]) if ":" in ES_ENV else 9200  # Default port for ES is 9200
+    PORT: int = int(ES_ENV.split(":")[1]) if ":" in ES_ENV else 9200 
     URL: str = f"http://{HOST}:{PORT}"
 
-    # Timeout settings
-    TIMEOUT: int = 30 #global timeout for all requests
-    CONNECT_TIMEOUT: int = 10 # connection attempt timeout
-    MAX_RETRIES: int = 3 # retries after failed connection attempts. Secure against network issues.
+
+    TIMEOUT: int = 30
+    CONNECT_TIMEOUT: int = 10 
+    MAX_RETRIES: int = 3 
 
     INDEX_NAME: str = "devsearch_index"
     INDEX_SETTINGS: Dict[str, Any] = {

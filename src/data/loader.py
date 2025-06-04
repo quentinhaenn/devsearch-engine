@@ -388,13 +388,13 @@ class DataLoader:
             return
         
         try:
-            self.create_embeddings(documents)
+            self._create_embeddings(documents)
             logger.info(f"Generated embeddings for {len(documents)} documents.")
         except Exception as e:
             logger.error(f"Error generating embeddings: {e}")
             raise e
     
-    def create_embeddings(self, documents: List[Dict[str, Any]]) -> None:
+    def _create_embeddings(self, documents: List[Dict[str, Any]]) -> None:
         """
         Create embeddings for documents.
         
@@ -406,14 +406,21 @@ class DataLoader:
         """
         logger.info("Creating embeddings for documents...")
         try:
-            for doc in documents:
-                doc['embedding'] = self.embedding_manager.generate_document_embedding(
-                    title=doc.get('title', ''),
-                    content=doc.get('content', ''),
-                    weight_title=0.4
-                )
-            
-            logger.info(f"Embeddings created for {len(documents)} documents.")
+            if not documents:
+                logger.warning(f"No documents provided for embeddings")
+                return
+            titles = [doc.get('title', "") for doc in documents]
+            contents = [doc.get('content', "") for doc in documents]
+
+            batch_embeddings = self.embedding_manager.generate_batch_documents_embeddings(titles=titles, contents=contents, weight_title=0.4)
+
+            if len(batch_embeddings) == len(documents):
+                for i, doc in enumerate(documents):
+                    doc['embedding'] = batch_embeddings[i]
+                logger.info(f"Embeddings created for {len(documents)}")
+            else:
+                logger.error(f"Mismatch between embeddings and documents sizes. Aborting.")
+                raise ValueError("Mismatch in numbers of documents during embedding generation. Aborting process")
         except Exception as e:
             logger.error(f"Error creating embeddings: {e}")
             raise e

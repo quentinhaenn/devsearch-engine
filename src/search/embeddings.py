@@ -4,6 +4,7 @@ Embedding generation and semantic search functionality.
 
 import logging
 import numpy as np
+from typing import List
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
@@ -24,107 +25,109 @@ class EmbeddingManager:
         """
         self.model_name = model_name
         self.embedding_dim = 384 if "MiniLM" in model_name else 768
+        self._model = None
         
         logger.info(f"Loading Sentence-BERT model: {model_name}")
 
         try:
             # Charger le modèle Sentence-BERT
-            self.model = SentenceTransformer(model_name)
+            if not self._model:
+                self._model = SentenceTransformer(model_name)
+                
             logger.info(f"Model loaded: {self.embedding_dim}D embeddings")
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise
-    
-    def generate_embedding(self, text: str) -> np.ndarray:
-        """
-        Generate embedding for a single text.
-        
-        Args:
-            text: Input text to embed
-            
-        Returns:
-            numpy array of embedding vector
-        """
-        if not text or not text.strip():
-            return np.zeros(self.embedding_dim)
-        
-        try:
-            # Normalize text
-            text = self._preprocess_text(text)
-            
-            # Generate
-            embedding = self.model.encode(text, convert_to_tensor=False)
-            
-            # Normalize
-            embedding = embedding / np.linalg.norm(embedding)
-            
-            return embedding.astype(np.float32) # Custom float32 for less memory usage
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to generate embedding: {e}")
-            return np.zeros(self.embedding_dim)
-    
-    def generate_document_embedding(self, title: str, content: str, weight_title: float = 0.3) -> np.ndarray:
-        """
-        Generate embedding for a document combining title and content.
-        
-        Args:
-            title: Document title
-            content: Document content
-            weight_title: Weight for title vs content (0.3 = 30% title, 70% content)
-            
-        Returns:
-            Combined embedding vector
-        """
-        try:
-            # Embedding séparés
-            title_emb = self.generate_embedding(title)
-            content_emb = self.generate_embedding(content[:500])  # Limite pour performance
-            
-            # Combinaison pondérée
-            combined = (weight_title * title_emb) + ((1 - weight_title) * content_emb)
-            
-            # Re-normaliser
-            combined = combined / np.linalg.norm(combined)
-            
-            return combined
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to generate document embedding: {e}")
-            return np.zeros(self.embedding_dim)
-    
 
-    def _preprocess_text(self, text: str) -> str:
+    def generate_query_embedding(self, query: str) -> np.ndarray:
+        """
+        generate only one embedding for query.
+        """
+        if not query:
+            logger.error("EMPTY QUERY: Aborting")
+            return
+        
+        try:
+            query = self._preprocess_text([query])[0]
+            query_embedding = self._model.encode(query)
+            query_embedding = query_embedding / np.linalg.norm(query_embedding)
+            return query_embedding
+        except Exception as e:
+            logger.error(f"Error during generating query embeddings : {e}")
+            raise
+    
+    def generate_batch_embeddings(self, text_list: List[str], batch_size: int = 32) -> List[np.ndarray]:
+        """
+        generate embedding using batch processing.
+
+        Args:
+            text_list (List[str]) : list of text to embed
+        
+        Returns:
+            List[np.ndarray] : List of embeddings vectors
+        """
+        if not text_list:
+            return [np.zeros(self.embedding_dim)]
+        
+        try:
+            text = self._preprocess_text(text_list)
+
+            embeddings = self._model.encode(text, batch_size=batch_size)
+            embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+            return embeddings
+        except Exception as e :
+            logger.error(f"Error during embeddings : {e}")
+            raise
+    
+    def generate_batch_documents_embeddings(self, 
+                                            titles: List[str],
+                                            contents:List[str],
+                                            weight_title: float = 0.4) -> List[np.ndarray]:
+        """
+        Generate embedding for batches of documents
+        """
+        try:
+            title_embeddings = self.generate_batch_embeddings(text_list=titles)
+            content_embeddings = self.generate_batch_embeddings(text_list=contents)
+            combined = (weight_title * title_embeddings) + ((1-weight_title)*content_embeddings)
+
+            combined = combined / np.linalg.norm(combined, axis=1, keepdims=True)
+
+            return combined
+        except Exception as e:
+            logger.error(f"Error during combined embeddings : {e}")
+            raise
+
+    def _preprocess_text(self, text_list: List[str]) -> List[str]:
         """Preprocess text for better embedding quality."""
-        if not text:
+        if not text_list:
             return ""
         
         # Nettoyer et normaliser
-        text = text.strip()
+        text_list = np.strings.strip(text_list)
         
-        # Limiter la taille
-        if len(text) > 2000:
-            text = text[:2000] + "..."
-        
-        return text
+        return text_list
     
-    def compute_similarity(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
+    def compute_similarity(self, emb1: np.ndarray) -> List[float]:
         """
         Compute cosine similarity between two embeddings.
         
         Args:
-            emb1, emb2: Normalized embedding vectors
+            emb1: Normalized embedding array of vectors
             
         Returns:
-            Cosine similarity score (0-1)
+            Vector of Cosine similarity score (0-1)
         """
+        similarities = []
         try:
             # Similarité cosinus (embeddings déjà normalisés)
-            similarity = np.dot(emb1, emb2)
-            return float(similarity)
+            for emb in emb1:
+                similarity = np.vecdot(emb, emb1)
+                similarities.append(similarity)
+            return similarities
         except:
-            return 0.0
+            return [0.0]
 
 # Test rapide du module
 if __name__ == "__main__":
@@ -133,7 +136,7 @@ if __name__ == "__main__":
     
     # Test embedding simple
     text = "FastAPI authentication with JWT tokens"
-    embedding = emb_manager.generate_embedding(text)
+    embedding = emb_manager.generate_batch_embeddings([text])
     print(f"Generated embedding shape: {embedding.shape}")
     
     # Test similarité
@@ -141,13 +144,10 @@ if __name__ == "__main__":
     text2 = "Flask web development"
     text3 = "Database optimization"
     
-    emb1 = emb_manager.generate_embedding(text1)
-    emb2 = emb_manager.generate_embedding(text2)
-    emb3 = emb_manager.generate_embedding(text3)
+    emb = emb_manager.generate_batch_embeddings([text1, text2, text3])
+
+    sim = emb_manager.compute_similarity(emb)
     
-    sim_12 = emb_manager.compute_similarity(emb1, emb2)
-    sim_13 = emb_manager.compute_similarity(emb1, emb3)
-    
-    print(f"Similarity 'Python web' vs 'Flask web': {sim_12:.3f}")
-    print(f"Similarity 'Python web' vs 'Database': {sim_13:.3f}")
+    print(f"Similarity 'Python web' vs 'Flask web': {sim[0][1]:.3f}")
+    print(f"Similarity 'Python web' vs 'Database': {sim[0][2]:.3f}")
     print("✅ Embedding manager test completed!")
