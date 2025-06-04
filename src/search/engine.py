@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Literal
 from src.data import client
 from .embeddings import EmbeddingManager
+from .reranker import CrossEncoderReranker, RerankingResult
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +22,7 @@ class SearchEngine:
         self.default_index = "devsearch_index"
         self.default_timeout = 30  # seconds
         self.embedding_manager = EmbeddingManager()
+        self.reranker = CrossEncoderReranker()
 
     def _build_query(self, query: str, index_name: str = None, **kwargs) -> Dict[str, Any]:
         """
@@ -486,15 +488,19 @@ class SearchEngine:
 
 
     ### Method for CLI ###
-    def search(self, query: str, index_name: str = None, search_type: Literal["simple", "advanced", "semantic"] = "simple", **kwargs) -> Dict[str, Any]:
+    def search(self, query: str, index_name: str = None, search_type: Literal["simple", "advanced", "semantic"] = "simple", **kwargs) -> RerankingResult:
         if search_type == "simple":
-            return self.simple_search(query, index_name=index_name, **kwargs)
+            results = self.simple_search(query, index_name=index_name, **kwargs)
         elif search_type == "advanced":
-            return self.advanced_search(query, index_name=index_name, **kwargs)
+            results = self.advanced_search(query, index_name=index_name, **kwargs)
         elif search_type == "semantic":
-            return self.semantic_search(query, index_name=index_name, **kwargs)
+            results = self.semantic_search(query, index_name=index_name, **kwargs)
         else:
             raise ValueError(f"Unknown search type: {search_type}")
+        return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10))
+    
+    def explain_results(self, results: RerankingResult, query: str):
+        print(self.reranker.explain_reranking(reranking_result=results, query=query))
 
     #### Quick and Advanced Tests ####
     def quick_test(self) -> None:

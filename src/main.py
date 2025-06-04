@@ -18,12 +18,12 @@ def cli():
 def search(query, limit, type):
     """Perform a search with the given query."""
     engine = SearchEngine()
-    results = engine.search(query, top_k=limit, search_type=type).get("results", [])
+    results = engine.search(query, top_k=limit, search_type=type)
+    
     if not results:
         click.echo("No results found.")
         return
-    for idx, result in enumerate(results, start=1):
-        click.echo(f"{idx}.\n Title: {result['title']}\n Content: {result['content']}\nScore: {result['score']}\n")
+    engine.explain_results(results, query)
 
 if __name__ == "__main__":
     cli()
