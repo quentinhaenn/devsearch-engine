@@ -304,7 +304,16 @@ class SearchEngine:
             raise ValueError(f"Unknown search type: {search_type}")
         
         search_time = datetime.now() - start
-        return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10), search_time=search_time, no_rerank=kwargs.get("no_rerank", False))
+        if not kwargs.get("no_rerank", False):
+            return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10), search_time=search_time, no_rerank=kwargs.get("no_rerank", False))
+        else:
+            return RerankingResult(
+                search_time=search_time,
+                reranked_results=results.get("results", []),
+                original_results=results.get("results", []),
+                reranking_time=None,
+                improvements=[],
+            )
 
     def explain_results(self, results: RerankingResult, query: str):
         print(self.reranker.explain_reranking(reranking_result=results, query=query))
