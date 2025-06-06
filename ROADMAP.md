@@ -66,11 +66,11 @@
   - [ ] Output formaté (table, JSON) avec highlighting
   - [ ] Mode verbeux avec explication des scores
 
-- [ ] **Dataset de démonstration riche**
+- [x] **Dataset de démonstration riche**
   - [ ] Docs FastAPI, Django, Flask (popularité variable)
   - [ ] Guides ML/AI récents vs anciens
-  - [ ] Documentation GitHub (avec stars réelles)
-  - [ ] Articles Stack Overflow avec vues
+  - [x] Documentation GitHub (avec stars réelles)
+  - [x] Articles Stack Overflow avec vues
 
 - [ ] **Performance et monitoring**
   - [x] Métriques de latence (recherche, reranking, total)
