@@ -298,12 +298,14 @@ class SearchEngine:
     ### Method for CLI ###
     def search(self, query: str, index_name: str = None, search_type: Literal["simple"] = "simple", **kwargs) -> RerankingResult:
         if search_type == "simple":
+            start = datetime.now()
             results = self.simple_search(query, index_name=index_name, **kwargs)
         else:
             raise ValueError(f"Unknown search type: {search_type}")
         
-        return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10))
-    
+        search_time = datetime.now() - start
+        return self.reranker.rerank(query=query, results=results.get("results", []), top_k=kwargs.get("top_k", 10), search_time=search_time, no_rerank=kwargs.get("no_rerank", False))
+
     def explain_results(self, results: RerankingResult, query: str):
         print(self.reranker.explain_reranking(reranking_result=results, query=query))
 

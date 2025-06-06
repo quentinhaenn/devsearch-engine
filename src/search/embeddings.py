@@ -32,8 +32,8 @@ class EmbeddingManager:
         try:
             # Charger le modèle Sentence-BERT
             if not self._model:
-                self._model = SentenceTransformer(model_name)
-                
+                self._model = SentenceTransformer(model_name, cache_folder='./cache/sentence_transformers')
+
             logger.info(f"Model loaded: {self.embedding_dim}D embeddings")
 
         except Exception as e:

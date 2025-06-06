@@ -15,8 +15,9 @@ class RerankingResult:
     """result of reranking"""
     original_results: List[Dict[str, Any]]
     reranked_results: List[Dict[str, Any]]
-    reranking_time: float
-    improvements: List[int]
+    search_time: float
+    reranking_time: Optional[float]
+    improvements: Optional[List[int]]
 
 class CrossEncoderReranker:
     """
@@ -62,21 +63,36 @@ class CrossEncoderReranker:
     def rerank(self,
                query: str,
                results: List[Dict[str, Any]],
-               top_k: int) -> RerankingResult:
+               search_time: float,
+               top_k: int,
+               no_rerank: bool) -> RerankingResult:
         """
         Rerank original results using cross-encoder scores.
 
         Args:
             query: Original search
             results: original results
+            search_time: time taken for original search
             top_k: number of top results to return
+            no_rerank: if True, skip reranking and return original results
         
         Returns:
-            RerankingResult with reranked results and metadata
+            RerankingResult with reranked results and metadata if not no_rerank else original results.
+        Raises:
+            RuntimeError: If model is not loaded or if there is an error during reranking.
         """
 
         if not results:
-            return RerankingResult([], [], 0.0, [])
+            return RerankingResult([], [], 0.0, 0.0, [])
+        if no_rerank:
+            logger.info("Skipping reranking as no_rerank is set to True")
+            return RerankingResult(
+                original_results=results,
+                reranked_results=results[:top_k],
+                search_time=search_time,
+                reranking_time=0.0,
+                improvements=[]
+            )
 
         start = time.time()
 
@@ -99,6 +115,7 @@ class CrossEncoderReranker:
             return RerankingResult(
                 original_results=original_results,
                 reranked_results=top,
+                search_time=search_time,
                 reranking_time=reranked_time,
                 improvements=improvements
             )
@@ -107,6 +124,7 @@ class CrossEncoderReranker:
             return RerankingResult(
                 original_results=results,
                 reranked_results=results[:top_k],
+                search_time=search_time,
                 reranking_time=time.time()-start,
                 improvements=[]
             )

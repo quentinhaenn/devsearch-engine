@@ -7,3 +7,5 @@ __pycache__/
 *.parquet
 
 .DS_Store
+
+cache/sentence_transformers/
